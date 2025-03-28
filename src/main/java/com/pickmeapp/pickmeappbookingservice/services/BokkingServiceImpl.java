@@ -2,13 +2,12 @@ package com.pickmeapp.pickmeappbookingservice.services;
 
 import com.pickme.pickmeappentityservice.models.Booking;
 import com.pickme.pickmeappentityservice.models.BookingStatus;
+import com.pickme.pickmeappentityservice.models.Driver;
 import com.pickme.pickmeappentityservice.models.Passenger;
 import com.pickmeapp.pickmeappbookingservice.apis.LocationServiceApi;
-import com.pickmeapp.pickmeappbookingservice.dtos.CreateBookingRequestDto;
-import com.pickmeapp.pickmeappbookingservice.dtos.CreateBookingResponseDto;
-import com.pickmeapp.pickmeappbookingservice.dtos.DriverLocationDto;
-import com.pickmeapp.pickmeappbookingservice.dtos.NearbyDriversRequestDto;
+import com.pickmeapp.pickmeappbookingservice.dtos.*;
 import com.pickmeapp.pickmeappbookingservice.repositories.BookingRepository;
+import com.pickmeapp.pickmeappbookingservice.repositories.DriverRepository;
 import com.pickmeapp.pickmeappbookingservice.repositories.PassengerRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -28,15 +27,18 @@ public class BokkingServiceImpl implements BookingService{
     private final BookingRepository bookingRepository;
     private final RestTemplate restTemplate;
     private final LocationServiceApi locationServiceApi;
+    private final DriverRepository driverRepository;
 //    private static final String LOCATION_SERVICE = "http://localhost:7777";
 
     public BokkingServiceImpl(PassengerRepository passengerRepository,
                               BookingRepository bookingRepository,
-                               LocationServiceApi locationServiceApi ) {
+                               LocationServiceApi locationServiceApi ,
+                              DriverRepository driverRepository) {
         this.passengerRepository = passengerRepository;
         this.bookingRepository = bookingRepository;
         this.restTemplate = new RestTemplate();
         this.locationServiceApi = locationServiceApi;
+        this.driverRepository = driverRepository;
     }
 
     @Override
@@ -67,6 +69,21 @@ public class BokkingServiceImpl implements BookingService{
         return CreateBookingResponseDto.builder()
                 .bookingId(newBooking.getId())
                 .bookingStatus(newBooking.getBookingStatus().toString())
+                .build();
+    }
+
+    @Override
+    public UpdateBookingResponseDto updateBooking(UpdateBookingRequestDto updateBookingRequestDto,Long bookingId) {
+        Optional<Driver> driverOptional = driverRepository.findById(updateBookingRequestDto.getDriverId().get());
+        if(driverOptional.isPresent()){
+            bookingRepository.updateBookingStatusAndDriverById(bookingId,BookingStatus.valueOf(updateBookingRequestDto.getStatus()),driverOptional.get());
+
+        }
+        Optional<Booking> booking = bookingRepository.findById(bookingId);
+        return UpdateBookingResponseDto.builder()
+                .bookingId(bookingId)
+                .status(booking.get().getBookingStatus())
+                .driver(Optional.ofNullable(booking.get().getDriver()))
                 .build();
     }
 
