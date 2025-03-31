@@ -5,11 +5,11 @@ import com.pickme.pickmeappentityservice.models.BookingStatus;
 import com.pickme.pickmeappentityservice.models.Driver;
 import com.pickme.pickmeappentityservice.models.Passenger;
 import com.pickmeapp.pickmeappbookingservice.apis.LocationServiceApi;
+import com.pickmeapp.pickmeappbookingservice.apis.PickMeSocketApi;
 import com.pickmeapp.pickmeappbookingservice.dtos.*;
 import com.pickmeapp.pickmeappbookingservice.repositories.BookingRepository;
 import com.pickmeapp.pickmeappbookingservice.repositories.DriverRepository;
 import com.pickmeapp.pickmeappbookingservice.repositories.PassengerRepository;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import retrofit2.Call;
@@ -27,18 +27,21 @@ public class BokkingServiceImpl implements BookingService{
     private final BookingRepository bookingRepository;
     private final RestTemplate restTemplate;
     private final LocationServiceApi locationServiceApi;
+    private final PickMeSocketApi pickMeSocketApi;
     private final DriverRepository driverRepository;
 //    private static final String LOCATION_SERVICE = "http://localhost:7777";
 
     public BokkingServiceImpl(PassengerRepository passengerRepository,
                               BookingRepository bookingRepository,
                                LocationServiceApi locationServiceApi ,
-                              DriverRepository driverRepository) {
+                              DriverRepository driverRepository,
+                              PickMeSocketApi pickMeSocketApi) {
         this.passengerRepository = passengerRepository;
         this.bookingRepository = bookingRepository;
         this.restTemplate = new RestTemplate();
         this.locationServiceApi = locationServiceApi;
         this.driverRepository = driverRepository;
+        this.pickMeSocketApi = pickMeSocketApi;
     }
 
     @Override
@@ -50,12 +53,13 @@ public class BokkingServiceImpl implements BookingService{
                                  .endLocation(createBookingRequestDto.getEndLocation())
                                   .passenger(passengerOptional.get())
                                  .build();
+        Booking newBooking = bookingRepository.save(booking);
 
         NearbyDriversRequestDto request = NearbyDriversRequestDto.builder()
                 .latitude(createBookingRequestDto.getStartLocation().getLatitude())
                 .longitude(createBookingRequestDto.getStartLocation().getLongitude())
                 .build();
-        processNearByDriversAsync(request);
+        processNearByDriversAsync(request,createBookingRequestDto,newBooking.getId());
 //
 //        ResponseEntity<DriverLocationDto[]> result = restTemplate.postForEntity(LOCATION_SERVICE+"/api/location/nearby/drivers",request, DriverLocationDto[].class);
 //
@@ -65,7 +69,7 @@ public class BokkingServiceImpl implements BookingService{
 //                System.out.println(driverLocationDto.getDriverId() + " " + "lat: " + driverLocationDto.getLatitude() + "long: " + driverLocationDto.getLongitude());
 //            });
 //        }
-         Booking newBooking = bookingRepository.save(booking);
+
         return CreateBookingResponseDto.builder()
                 .bookingId(newBooking.getId())
                 .bookingStatus(newBooking.getBookingStatus().toString())
@@ -87,7 +91,7 @@ public class BokkingServiceImpl implements BookingService{
                 .build();
     }
 
-    public void processNearByDriversAsync(NearbyDriversRequestDto nearbyDriversRequestDto){
+    public void processNearByDriversAsync(NearbyDriversRequestDto nearbyDriversRequestDto,CreateBookingRequestDto createBookingRequestDto,Long bookingId){
         Call<DriverLocationDto[]> call = locationServiceApi.getNearsetDrivers(nearbyDriversRequestDto);
         call.enqueue(new Callback<DriverLocationDto[]>() {
             @Override
@@ -97,6 +101,12 @@ public class BokkingServiceImpl implements BookingService{
                     driverLocations.forEach(driverLocationDto -> {
                         System.out.println(driverLocationDto.getDriverId() + " " + "lat: " + driverLocationDto.getLatitude() + "long: " + driverLocationDto.getLongitude());
                     });
+                    raisedRideRequestAsync(RideRequestDto.builder()
+                            .passengerId(createBookingRequestDto.getPassengerId())
+                            .startLocation(createBookingRequestDto.getStartLocation())
+                            .endLocation(createBookingRequestDto.getEndLocation())
+                            .bookingId(bookingId)
+                            .build());
                 }else{
                     System.out.println("Response failed "+response.message());
                 }
@@ -107,5 +117,26 @@ public class BokkingServiceImpl implements BookingService{
                 throwable.printStackTrace();
             }
         });
+    }
+
+    private void raisedRideRequestAsync(RideRequestDto rideRequestDto){
+        Call<Boolean> call = pickMeSocketApi.raiseRideRequest(rideRequestDto);
+        call.enqueue(new Callback<Boolean>() {
+            @Override
+            public void onResponse(Call<Boolean> call, Response<Boolean> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    Boolean result = response.body();
+                    System.out.println("Driver Response is "+result.toString());
+                }else{
+                    System.out.println("Request Failed "+response.message());
+                }
+
+            }
+            @Override
+            public void onFailure(Call<Boolean> call, Throwable throwable) {
+              throwable.printStackTrace();
+            }
+        });
+
     }
 }

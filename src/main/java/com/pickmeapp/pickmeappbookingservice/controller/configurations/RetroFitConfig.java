@@ -1,7 +1,8 @@
-package com.pickmeapp.pickmeappbookingservice.configurations;
+package com.pickmeapp.pickmeappbookingservice.controller.configurations;
 
 import com.netflix.discovery.EurekaClient;
 import com.pickmeapp.pickmeappbookingservice.apis.LocationServiceApi;
+import com.pickmeapp.pickmeappbookingservice.apis.PickMeSocketApi;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +29,16 @@ public class RetroFitConfig {
                 .client(new OkHttpClient.Builder().build())
                 .build()
                 .create(LocationServiceApi.class);
+    }
+
+    @Bean
+    public PickMeSocketApi pickMeSocketApi() {
+        return new Retrofit.Builder()
+                .baseUrl(getServiceUrl("PICKMEAPP-SOCKETSERVICE"))
+                .addConverterFactory(GsonConverterFactory.create())
+                .client(new OkHttpClient.Builder().build())
+                .build()
+                .create(PickMeSocketApi.class);
     }
 
 
