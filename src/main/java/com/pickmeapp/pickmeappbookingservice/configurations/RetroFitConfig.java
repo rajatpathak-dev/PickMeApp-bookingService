@@ -1,4 +1,4 @@
-package com.pickmeapp.pickmeappbookingservice.controller.configurations;
+package com.pickmeapp.pickmeappbookingservice.configurations;
 
 import com.netflix.discovery.EurekaClient;
 import com.pickmeapp.pickmeappbookingservice.apis.LocationServiceApi;

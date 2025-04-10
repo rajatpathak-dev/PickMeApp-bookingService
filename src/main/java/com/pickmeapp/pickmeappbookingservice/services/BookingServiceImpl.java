@@ -10,18 +10,20 @@ import com.pickmeapp.pickmeappbookingservice.dtos.*;
 import com.pickmeapp.pickmeappbookingservice.repositories.BookingRepository;
 import com.pickmeapp.pickmeappbookingservice.repositories.DriverRepository;
 import com.pickmeapp.pickmeappbookingservice.repositories.PassengerRepository;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 @Service
-public class BokkingServiceImpl implements BookingService{
+public class BookingServiceImpl implements BookingService{
 
     private final PassengerRepository passengerRepository;
     private final BookingRepository bookingRepository;
@@ -31,9 +33,9 @@ public class BokkingServiceImpl implements BookingService{
     private final DriverRepository driverRepository;
 //    private static final String LOCATION_SERVICE = "http://localhost:7777";
 
-    public BokkingServiceImpl(PassengerRepository passengerRepository,
+    public BookingServiceImpl(PassengerRepository passengerRepository,
                               BookingRepository bookingRepository,
-                               LocationServiceApi locationServiceApi ,
+                              LocationServiceApi locationServiceApi ,
                               DriverRepository driverRepository,
                               PickMeSocketApi pickMeSocketApi) {
         this.passengerRepository = passengerRepository;
@@ -60,16 +62,6 @@ public class BokkingServiceImpl implements BookingService{
                 .longitude(createBookingRequestDto.getStartLocation().getLongitude())
                 .build();
         processNearByDriversAsync(request,createBookingRequestDto,newBooking.getId());
-//
-//        ResponseEntity<DriverLocationDto[]> result = restTemplate.postForEntity(LOCATION_SERVICE+"/api/location/nearby/drivers",request, DriverLocationDto[].class);
-//
-//        if(result.getStatusCode().is2xxSuccessful() && result.getBody() != null) {
-//            List<DriverLocationDto> driverLocations = Arrays.asList(result.getBody());
-//            driverLocations.forEach(driverLocationDto -> {
-//                System.out.println(driverLocationDto.getDriverId() + " " + "lat: " + driverLocationDto.getLatitude() + "long: " + driverLocationDto.getLongitude());
-//            });
-//        }
-
         return CreateBookingResponseDto.builder()
                 .bookingId(newBooking.getId())
                 .bookingStatus(newBooking.getBookingStatus().toString())
@@ -77,18 +69,20 @@ public class BokkingServiceImpl implements BookingService{
     }
 
     @Override
-    public UpdateBookingResponseDto updateBooking(UpdateBookingRequestDto updateBookingRequestDto,Long bookingId) {
+    @KafkaListener(topics = "PickMeApp-SocketPublisher")
+    public void updateBooking(UpdateBookingRequestDto updateBookingRequestDto) {
         Optional<Driver> driverOptional = driverRepository.findById(updateBookingRequestDto.getDriverId().get());
         if(driverOptional.isPresent()){
-            bookingRepository.updateBookingStatusAndDriverById(bookingId,BookingStatus.valueOf(updateBookingRequestDto.getStatus()),driverOptional.get());
+            bookingRepository.updateBookingStatusAndDriverById(updateBookingRequestDto.getBookingId(),BookingStatus.valueOf(updateBookingRequestDto.getStatus()),driverOptional.get());
 
         }
-        Optional<Booking> booking = bookingRepository.findById(bookingId);
-        return UpdateBookingResponseDto.builder()
-                .bookingId(bookingId)
+        Optional<Booking> booking = bookingRepository.findById(updateBookingRequestDto.getBookingId());
+        UpdateBookingResponseDto updateBookingResponseDto = UpdateBookingResponseDto.builder()
+                .bookingId(updateBookingRequestDto.getBookingId())
                 .status(booking.get().getBookingStatus())
                 .driver(Optional.ofNullable(booking.get().getDriver()))
                 .build();
+        System.out.println(updateBookingResponseDto.toString());
     }
 
     public void processNearByDriversAsync(NearbyDriversRequestDto nearbyDriversRequestDto,CreateBookingRequestDto createBookingRequestDto,Long bookingId){
@@ -98,13 +92,16 @@ public class BokkingServiceImpl implements BookingService{
             public void onResponse(Call<DriverLocationDto[]> call, Response<DriverLocationDto[]> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     List<DriverLocationDto> driverLocations = Arrays.asList(response.body());
+                    List<Long> driverIds = new ArrayList<>();
                     driverLocations.forEach(driverLocationDto -> {
                         System.out.println(driverLocationDto.getDriverId() + " " + "lat: " + driverLocationDto.getLatitude() + "long: " + driverLocationDto.getLongitude());
+                        driverIds.add(Long.valueOf(driverLocationDto.getDriverId()));
                     });
                     raisedRideRequestAsync(RideRequestDto.builder()
                             .passengerId(createBookingRequestDto.getPassengerId())
                             .startLocation(createBookingRequestDto.getStartLocation())
                             .endLocation(createBookingRequestDto.getEndLocation())
+                            .driverId(driverIds)
                             .bookingId(bookingId)
                             .build());
                 }else{

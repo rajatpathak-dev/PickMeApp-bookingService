@@ -11,6 +11,7 @@ import java.util.Optional;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@ToString
 public class UpdateBookingResponseDto {
 
     private Long bookingId;
