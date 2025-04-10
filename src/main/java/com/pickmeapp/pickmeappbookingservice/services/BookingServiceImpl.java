@@ -69,7 +69,6 @@ public class BookingServiceImpl implements BookingService{
     }
 
     @Override
-    @KafkaListener(topics = "PickMeApp-SocketPublisher")
     public void updateBooking(UpdateBookingRequestDto updateBookingRequestDto) {
         Optional<Driver> driverOptional = driverRepository.findById(updateBookingRequestDto.getDriverId().get());
         if(driverOptional.isPresent()){
